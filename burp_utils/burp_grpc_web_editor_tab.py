@@ -41,7 +41,6 @@ class GrpcWebExtensionEditorTab(IMessageEditorTab, ActionListener):  # FIXED: Im
         # Buttons for Type Definition
         self._editButton = JButton("Edit Type Definition", actionPerformed=self.actionPerformed)
         self._saveButton = JButton("Save Type Definition", actionPerformed=self.actionPerformed)
-        self._resetButton = JButton("Reset Type Definition (Auto)", actionPerformed=self.actionPerformed)
         self._saveButton.setEnabled(False)
         self._isTypeDefinitionEdited = False
 
@@ -52,7 +51,6 @@ class GrpcWebExtensionEditorTab(IMessageEditorTab, ActionListener):  # FIXED: Im
         self._buttonPanel = JPanel()
         self._buttonPanel.add(self._editButton)
         self._buttonPanel.add(self._saveButton)
-        self._buttonPanel.add(self._resetButton)
 
         # Add button panel to the bottom of Type Definition tab
         self._typeDefPanel.add(self._buttonPanel, BorderLayout.SOUTH)
