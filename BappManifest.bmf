@@ -1,0 +1,13 @@
+Uuid: 63b92be302fa4521bf18d74b3adbbc00
+ExtensionType: 2
+Name: gRPC-Web Coder
+RepoName: grpc-web-coder
+ScreenVersion: 1.0.0
+SerialVersion: 1
+MinPlatformVersion: 2
+ProOnly: False
+Author: Amin Nasiri
+ShortDescription: Encode/Decode gRPC-Web payloads automatically.
+EntryPoint: grpc_web_burp_extension.py
+BuildCommand: 
+SupportedProducts: Pro, Community

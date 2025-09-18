@@ -30,3 +30,6 @@ download/
 main.js
 
 grpc_coder_output.txt
+
+BappModules/
+libs/

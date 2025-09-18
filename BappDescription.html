@@ -1,0 +1,18 @@
+<p>gRPC-Web Coder enhances your ability to analyze and manipulate gRPC-Web traffic by automatically decoding and encoding payloads. It supports both <code class="InlineCode">application/grpc-web-text</code> and <code class="InlineCode">application/grpc-web+proto</code> content types, streamlining the process of inspecting and modifying gRPC-Web messages during security assessments.</p>
+
+<h2>Features</h2>
+
+<ul>
+  <li>Automatic detection and decoding of gRPC-Web payloads based on <code class="InlineCode">Content-Type</code> or <code class="InlineCode">x-grpc-content-type</code> headers.</li>
+  <li>Support for both <code class="InlineCode">application/grpc-web-text</code> and <code class="InlineCode">application/grpc-web+proto</code> formats.</li>
+  <li>Dedicated tab for viewing and editing decoded protobuf messages directly within the message editor.</li>
+  <li>Seamless re-encoding of modified messages back into the appropriate gRPC-Web format.</li>
+</ul>
+
+<h2>Usage</h2>
+
+<p>Once the extension is active, it automatically processes requests with the appropriate <code class="InlineCode">Content-Type</code> or <code class="InlineCode">x-grpc-content-type</code> headers. The decoded protobuf message is displayed in a dedicated tab within the message editor, allowing for easy inspection and modification. Any changes made are automatically re-encoded when the message is sent.</p>
+
+<h3>Configure</h3>
+<p>For manual control, you can enable or disable the decoding features using the provided checkboxes in the extension's settings tab. This flexibility allows you to tailor the extension's behavior to your specific testing needs.</p>
+
