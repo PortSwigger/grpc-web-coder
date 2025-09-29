@@ -6,8 +6,6 @@ Available Content Types:
 - [x] application/grpc-web-text
 - [x] application/grpc-web+proto
 
-## Official gRPC-Web Coder in BApp
-[gRPC-web Coder BApp URL](https://portswigger.net/bappstore/63b92be302fa4521bf18d74b3adbbc00)
 
 gRPC-Pentest-Suite contains these 2 tools:
 - **[grpc_scan](#grpc-coder-usage)** scanning the gRPC-web javascript webpacked files to detect grpc endpoints, services, messages and field types
@@ -20,6 +18,9 @@ gRPC-Pentest-Suite contains these 2 tools:
 - **[old_grpc_web_burp_extension_with_dependency.py](#grpc-coder-old-extension-with-dependency-installation)** old extension for burp suite which has some dependencies
   - [x] only application/grpc-web-text support
 
+
+## Official gRPC-Web Coder in BApp
+[gRPC-web Coder BApp URL](https://portswigger.net/bappstore/63b92be302fa4521bf18d74b3adbbc00)
 
 # Video of New Extension
 [grpc_web_burp_extension.py](./grpc_web_burp_extension.py) file is new extension which does not have any dependencies and all dependencies are in this repo (in lib dir).
