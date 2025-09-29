@@ -6,6 +6,8 @@ Available Content Types:
 - [x] application/grpc-web-text
 - [x] application/grpc-web+proto
 
+## Official gRPC-Web Coder in BApp
+[gRPC-web Coder BApp URL](https://portswigger.net/bappstore/63b92be302fa4521bf18d74b3adbbc00)
 
 gRPC-Pentest-Suite contains these 2 tools:
 - **[grpc_scan](#grpc-coder-usage)** scanning the gRPC-web javascript webpacked files to detect grpc endpoints, services, messages and field types
