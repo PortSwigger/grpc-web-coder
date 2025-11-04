@@ -12,6 +12,7 @@ gRPC-Pentest-Suite contains these 2 tools:
 - **[grpc_web_burp_extension.py](#grpc-coder-extension-usage)** extension for burp suite to easily using gRPC-Coder tool
   - [x] application/grpc-web-text support
   - [x] application/grpc-web+proto support
+  - You can download this one using BApp
 - **[grpc_coder](#grpc-coder-usage)** encoding and decoding gRPC-web payloads for pentesting (manipulating payloads)
   - [x] only application/grpc-web-text support
 - **[big_string_chunker](#big-string-chunker-tool)** this tool chunks a big string into pieces of 80 characters, so that gRPC-coder can encode it (also reverse)
@@ -21,6 +22,7 @@ gRPC-Pentest-Suite contains these 2 tools:
 
 ## Official gRPC-Web Coder in BApp
 [gRPC-web Coder BApp URL](https://portswigger.net/bappstore/63b92be302fa4521bf18d74b3adbbc00)
+![gRPC-Web Coder BApp Photo](https://github.com/user-attachments/assets/5732481b-8126-49cc-9fd5-35c86248db75)
 
 # Video of New Extension
 [grpc_web_burp_extension.py](./grpc_web_burp_extension.py) file is new extension which does not have any dependencies and all dependencies are in this repo (in lib dir).
