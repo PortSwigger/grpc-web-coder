@@ -15,6 +15,9 @@ gRPC-Pentest-Suite contains these 2 tools:
   - You can download this one using BApp
 - **[grpc_coder](#grpc-coder-usage)** encoding and decoding gRPC-web payloads for pentesting (manipulating payloads)
   - [x] only application/grpc-web-text support
+- **[grpc_protobuf_decoder](#standalone-protobuf-decoder--encoder-no-protoscope-usage)** standalone pure-Python protobuf decoder/encoder (no dependencies, **no protoscope needed**)
+  - [x] decodes & encodes the protobuf wire format directly
+  - [x] supports grpc-web-text, grpc-web+proto, raw protobuf bytes and hex (e.g. a Kafka protobuf message)
 - **[big_string_chunker](#big-string-chunker-tool)** this tool chunks a big string into pieces of 80 characters, so that gRPC-coder can encode it (also reverse)
 - **[old_grpc_web_burp_extension_with_dependency.py](#grpc-coder-old-extension-with-dependency-installation)** old extension for burp suite which has some dependencies
   - [x] only application/grpc-web-text support
@@ -190,6 +193,87 @@ Output:
     AAAAADoSFkFtaW4gTmFzaXJpIFhlbm9uIEdSUEMYNjoePHNjcmlwdD5hbGVydChvcmlnaW4pPC9zY3JpcHQ+
 
 Then you put the new base64 payload into Burp Suite intercepted request.
+
+# Standalone Protobuf Decoder / Encoder (no protoscope) Usage
+
+[grpc_protobuf_decoder.py](grpc_protobuf_decoder.py) is a pure-Python tool that decodes **and** encodes the protobuf wire format itself, with **no dependencies** and **without needing protoscope**.
+
+Use this when you do not want to install `protoscope`, or when the payload is plain protobuf that is not wrapped in a gRPC-Web frame (for example a **protobuf message taken from a Kafka topic**, a file, a `.bin` dump, etc.).
+
+> Note: protobuf wire bytes do not contain field names, so output is field-number based (the same as protoscope).
+
+## Help & Supported Types
+
+    python3 grpc_protobuf_decoder.py --help
+
+    --decode  decode a payload into readable text (default)
+    --encode  encode the readable text format back into a protobuf payload
+    --type    payload format:
+                grpc-web-text   base64, default        e.g. AAAAAAUKA2Zvbw==
+                grpc-web+proto  raw gRPC framed bytes
+                raw             raw protobuf bytes (no gRPC frame)
+                hex             hex string of raw protobuf bytes
+    --file    read input from a file instead of stdin
+
+The readable text format (printed by `--decode`, consumed by `--encode`):
+
+    1: "a string"        # length-delimited string
+    2: 150               # varint
+    3: 0xdeadbeef        # raw bytes (hex)
+    4: fixed64=123       # 8-byte fixed (wire type 1)
+    5: fixed32=42        # 4-byte fixed (wire type 5)
+    6: {                 # nested message
+      1: "nested"
+    }
+
+## Decoding a gRPC-Web payload (no protoscope needed)
+
+    echo "AAAAABYSC0FtaW4gTmFzaXJpGDY6BVhlbm9u" | python3 grpc_protobuf_decoder.py --decode
+
+Output (varints also show alternative interpretations, since the wire type alone is ambiguous):
+
+    2: "Amin Nasiri"
+    3: 54, zigzag=27
+    7: "Xenon"
+
+When you re-encode, only the leading integer is used and the hints are ignored, so you can leave them or delete them.
+
+## Example: decode / encode a Kafka protobuf message
+
+A protobuf message stored in a Kafka topic is just **raw protobuf bytes** (there is no gRPC `application/grpc-web-text` framing), so use `--type raw` for a binary file or `--type hex` for a hex string.
+
+**Decode** a raw protobuf value dumped from Kafka into a file:
+
+    # message.bin holds the raw protobuf bytes of a Kafka record value
+    python3 grpc_protobuf_decoder.py --decode --type raw --file message.bin
+
+    # or as a hex string:
+    echo '0a03666f6f1096011a070a036261721001' | python3 grpc_protobuf_decoder.py --decode --type hex
+
+Output:
+
+    1: "foo"
+    2: 150, zigzag=75
+    3: {
+      1: "bar"
+      2: 1, zigzag=-1, bool=true
+    }
+
+**Edit** the fields you want (change a value, inject a payload, etc.), then **encode** it back to raw protobuf bytes you can produce/publish to Kafka:
+
+    printf '1: "foo INJECTED"\n2: 9999\n3: {\n  1: "bar"\n  2: 1\n}\n' \
+        | python3 grpc_protobuf_decoder.py --encode --type raw > new_message.bin
+
+    # or get a hex string instead of a binary file:
+    printf '1: "foo INJECTED"\n2: 9999\n' \
+        | python3 grpc_protobuf_decoder.py --encode --type hex
+
+To turn the same edited text back into a **gRPC-Web** payload (re-adds the frame + base64), just drop `--type` (defaults to `grpc-web-text`):
+
+    printf '2: "Amin Nasiri Xenon GRPC"\n3: 54\n7: "<script>alert(origin)</script>"\n' \
+        | python3 grpc_protobuf_decoder.py --encode
+
+> Confluent Schema Registry note: if your Kafka producer uses the Confluent wire format, each value has a 1-byte magic (`0x00`) + 4-byte schema id + a protobuf message-index header **before** the protobuf bytes. Strip that prefix before decoding with `--type raw`, and re-add it after encoding.
 
 # Big String Chunker Tool
 When you have a big string that you want to put it into a value in protobuf fields, you have to make that string into some pieces of characters using [big_string_chunker.py](big_string_chunker.py).
