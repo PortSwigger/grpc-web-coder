@@ -1,5 +1,0 @@
-grpcio
-protobuf
-requests
-websockets
-websocket-client

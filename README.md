@@ -1,471 +1,380 @@
-# gRPC Web Pentest Suite
+# gRPC Pentest Suite
 
-gRPC-Pentest-Suite is set of tools for pentesting / hacking gRPC Web applications.
+Tools for pentesting gRPC-Web applications.
 
-Available Content Types:
-- [x] application/grpc-web-text
-- [x] application/grpc-web+proto
+Supported content types: `application/grpc-web-text` and `application/grpc-web+proto`.
 
+## The Burp extension lives in its own repository now
 
-gRPC-Pentest-Suite contains these 2 tools:
-- **[grpc_scan](#grpc-coder-usage)** scanning the gRPC-web javascript webpacked files to detect grpc endpoints, services, messages and field types
-- **[grpc_web_burp_extension.py](#grpc-coder-extension-usage)** extension for burp suite to easily using gRPC-Coder tool
-  - [x] application/grpc-web-text support
-  - [x] application/grpc-web+proto support
-  - You can download this one using BApp
-- **[grpc_coder](#grpc-coder-usage)** encoding and decoding gRPC-web payloads for pentesting (manipulating payloads)
-  - [x] only application/grpc-web-text support
-- **[grpc_protobuf_decoder](#standalone-protobuf-decoder--encoder-no-protoscope-usage)** standalone pure-Python protobuf decoder/encoder (no dependencies, **no protoscope needed**)
-  - [x] decodes & encodes the protobuf wire format directly
-  - [x] supports grpc-web-text, grpc-web+proto, raw protobuf bytes and hex (e.g. a Kafka protobuf message)
-- **[big_string_chunker](#big-string-chunker-tool)** this tool chunks a big string into pieces of 80 characters, so that gRPC-coder can encode it (also reverse)
-- **[old_grpc_web_burp_extension_with_dependency.py](#grpc-coder-old-extension-with-dependency-installation)** old extension for burp suite which has some dependencies
-  - [x] only application/grpc-web-text support
+The Burp extension was rewritten in Java and moved out of this repo:
 
+- **Repository:** [nxenon/grpc-web-coder-extension](https://github.com/nxenon/grpc-web-coder-extension)
+- **BApp Store:** [gRPC-Web Coder](https://portswigger.net/bappstore/63b92be302fa4521bf18d74b3adbbc00)
 
-## Official gRPC-Web Coder in BApp
-[gRPC-web Coder BApp URL](https://portswigger.net/bappstore/63b92be302fa4521bf18d74b3adbbc00)
-![gRPC-Web Coder BApp Photo](https://github.com/user-attachments/assets/5732481b-8126-49cc-9fd5-35c86248db75)
+[![gRPC-Web Coder BApp](https://github.com/user-attachments/assets/5732481b-8126-49cc-9fd5-35c86248db75)](https://portswigger.net/bappstore/63b92be302fa4521bf18d74b3adbbc00)
 
-# Video of New Extension
-[grpc_web_burp_extension.py](./grpc_web_burp_extension.py) file is new extension which does not have any dependencies and all dependencies are in this repo (in lib dir).
+Install it from the BApp Store and you are done. It needs **no Jython, no protoscope and no
+`pip install`** — the old Python extension needed all three.
 
-## gRPC-Web Burp Extension Images
-- Main Settings:
-  
-![mainSettingsImage](https://github.com/user-attachments/assets/77d0dc20-f6a2-4ac6-b955-00cd6f90e0ec)
+It also does things the Python extension could not: decode responses as well as requests, handle
+every frame of a server-streaming body plus the trailer frame, inflate gzip frames, and export the
+JavaScript analysis as JSON, CSV, a reconstructed `.proto` or type definitions.
 
-- Message Editor:
-  
-![messageEditorMainImage](https://github.com/user-attachments/assets/2a72647c-bea6-44c5-920e-da051cdc93e0)
+## Looking for the old Python files?
 
-- Message Editor Decoded:
-  
-![messageEditorDecodedImage](https://github.com/user-attachments/assets/1c9a972c-42df-45ef-9317-989c912bfa99)
+They are on the **[`legacy/python-tools`](../../tree/legacy/python-tools)** branch, frozen and
+unmaintained:
 
-## Todo
-- [ ] Create tutorial video for using new extension
+```bash
+git checkout legacy/python-tools
+```
 
-# gRPC-Web Coder New Extension Usage [recommended]
-- The extension automatically gets enabled when the request has `Content-Type` or `x-grpc-content-type` headers (based on the settings you have set) with value of:
-  - application/grpc-web-text (extension automatically decodes and encodes the body)
-  - application/grpc-web+proto (extension automatically decodes and encodes the body)
-- Also, there is new burp tab which you can enable or disable encoding format checkboxes
+That branch holds the complete suite as it stood before the rewrite, including both Jython Burp
+extensions (`grpc_web_burp_extension.py` and `old_grpc_web_burp_extension_with_dependency.py`),
+their `burp_utils/` support code, and the vendored `libs/` (blackboxprotobuf, six).
 
-## gRPC-Web Coder New Extension Installation 
-1. Download the Whole Repository (the extension needs files in this repo)
-2. add [grpc_web_burp_extension.py](grpc_web_burp_extension.py) in Burp Extensions.
+One thing only the old extension had: the **Big String Chunker integrated into Burp**. The Java
+extension does not provide it yet, so use [`big_string_chunker.py`](big_string_chunker.py) from the
+command line, or the legacy branch if you need it inside Burp.
 
-## gRPC-Web Coder New Extension Features
-- New tab in repeater message editor
-- edit proto type definition
-- automatically detect grpc-web-text requests (via `Content-Type` or `x-grpc-content-type` headers)
-  - note: `x-grpc-content-type` is for when you want manually enable gRPC-Web Decoder Tab
-  - note: if you set value of headers to application/grpc-web-text the extension automatically decodes and encodes the payloads
+## What is in this repository
 
+Four standalone command-line tools. None of them is replaced by the Burp extension.
 
-# gRPC Coder Old Extension (with dependency) Usage
-after installing the extension it adds to menu items into extensions menu item:
-- gRPC Coder **Decode**
-- gRPC Coder **Encode**
+| Tool | What it does | Requirements |
+| --- | --- | --- |
+| [grpc_protobuf_decoder.py](#standalone-protobuf-decoder-and-encoder) | Decodes and encodes the protobuf wire format directly. Handles grpc-web-text, grpc-web+proto, raw protobuf and hex. | none |
+| [grpc_coder.py](#grpc-coder) | Encodes and decodes gRPC-Web payloads via protoscope. | protoscope |
+| [grpc_scan.py](#grpc-scan) | Pulls endpoints, messages and field types out of webpacked gRPC-Web JavaScript. | `pip install -r requirements.txt` |
+| [big_string_chunker.py](#big-string-chunker) | Splits a long string into 80-character protobuf pieces, and reassembles it. | none |
 
-Steps:
-1. select the gRPC-Web base64 payload in burp interceptor or repeater and click on Decode item for decoding to human-readable format
-2. edit the text and select the new edited text and click on Encode item for encoding to gRPC-Web base64 format
+If you are choosing between the two coders, use **`grpc_protobuf_decoder.py`**: it does everything
+`grpc_coder.py` does, plus raw and hex payloads, and it needs nothing installed.
 
-## Hacking into gRPC-Web Article & YouTube Video (old Extension)
-This article includes the methodology for pentesting gRPC-Web and a methodology for finding hidden servies and endpoints. Read [Hacking into gRPC-Web](https://infosecwriteups.com/hacking-into-grpc-web-a54053757a45) article and for `application/grpc-web+proto` see this article [Hacking into gRPC-Web : Part 2](https://medium.com/@nxenon/hacking-into-grpc-web-part-2-f8540309e1e8).
+---
 
-This video includes using both gRPC Scan tool and gRPC Coder Burp Suite Extension: How to manipulate gRPC-Web payloads and analyse the JavaScript webpacked files to find hidden endpoints, services and messages.
-[Watch](https://youtu.be/VoDyweIjT2U?si=kXWbQELnJZfyHaId)
+# Standalone Protobuf Decoder and Encoder
 
+[grpc_protobuf_decoder.py](grpc_protobuf_decoder.py) decodes **and** encodes the protobuf wire
+format itself, with no dependencies and without protoscope.
 
-[![Watch the video](https://img.youtube.com/vi/VoDyweIjT2U/maxresdefault.jpg)](https://youtu.be/VoDyweIjT2U?si=kXWbQELnJZfyHaId)
+Use it when you do not want to install protoscope, or when the payload is plain protobuf that is not
+wrapped in a gRPC-Web frame — for example a protobuf message taken from a Kafka topic, a file, or a
+`.bin` dump.
 
-## Watch the Old Extension Usage Video on YouTube
-[Watch](https://youtu.be/w75_ixNzM24)
+> Protobuf wire bytes do not carry field names, so output is field-number based. Run
+> [grpc_scan.py](#grpc-scan) over the site's JavaScript, or the Burp extension's analyzer, to
+> recover the names.
 
-[![Watch the video](https://img.youtube.com/vi/w75_ixNzM24/maxresdefault.jpg)](https://youtu.be/w75_ixNzM24)
+## Options
 
-# gRPC Coder Old Extension (with dependency) Installation
-1. Download the Whole Repository (the extension needs some files in this repo)
-2. add [old_grpc_web_burp_extension_with_dependency.py](old_grpc_web_burp_extension_with_dependency.py) in Burp Extensions.
-3. This extension has some dependencies which need to be installed: [Requirements](#requirements-for-burp-suite-old-extension-with-dependency)
+```
+python3 grpc_protobuf_decoder.py --help
 
-Note: [protoscope](https://github.com/protocolbuffers/protoscope) and python3 must be system globally installed.
+--decode  decode a payload into readable text (default)
+--encode  encode the readable text format back into a protobuf payload
+--type    payload format:
+            grpc-web-text   base64, default        e.g. AAAAAAUKA2Zvbw==
+            grpc-web+proto  raw gRPC framed bytes
+            raw             raw protobuf bytes (no gRPC frame)
+            hex             hex string of raw protobuf bytes
+--file    read input from a file instead of stdin
+```
 
+The readable text format, printed by `--decode` and consumed by `--encode`:
 
-## Requirements for Burp Suite Old Extension (with dependency)
+```
+1: "a string"        # length-delimited string
+2: 150               # varint
+3: 0xdeadbeef        # raw bytes (hex)
+4: fixed64=123       # 8-byte fixed (wire type 1)
+5: fixed32=42        # 4-byte fixed (wire type 5)
+6: {                 # nested message
+  1: "nested"
+}
+```
 
-    pip3 install -r requirements.txt
+## Decoding a gRPC-Web payload
 
-for **grpc_coder.py** you need to install [protoscope](https://github.com/protocolbuffers/protoscope) in system gloablly.
-    
-    go install github.com/protocolbuffers/protoscope/cmd/protoscope...@latest
+```bash
+echo "AAAAABYSC0FtaW4gTmFzaXJpGDY6BVhlbm9u" | python3 grpc_protobuf_decoder.py --decode
+```
 
-for **gRPC Coder Burp Extension** you need to have these requirements:
-- download the whole repository (because the script needs grpc.coder.py)
-- jython must be installed and configured in burp
-- protoscope must be installed globally on system (because the extension runs a protoscope command)
-- python3 must be installed to run the grpc_coder.py script (because the gRPC-Coder is written in python3)
-- in windows python 3 binary name is **python** and in linux and mac the binary name is **python3** 
+```
+2: "Amin Nasiri"
+3: 54, zigzag=27
+7: "Xenon"
+```
 
-the extension runs two **safe** commands to work with grpc_coder.py and protoscope tools.
+Varints show alternative interpretations, because the wire type alone is ambiguous. On re-encode only
+the leading integer is used and the hints are ignored, so leave them or delete them as you like.
 
-## Old Extension Features
-New Features:
-1. Automatically Encode/Decode by New Decoded Protobuf Tab (you can directly view the decoded protobuf in the Burp tool (Repeater, Proxy, Intruder...) AND automatically encode it back if we changed anything.)
+## Kafka protobuf messages
 
-![1. decoded_protobuf_tab_image](https://github.com/user-attachments/assets/293888a8-12ad-4152-913a-6883df625502)
+A protobuf message in a Kafka topic is raw protobuf bytes with no gRPC framing, so use `--type raw`
+for a binary file or `--type hex` for a hex string.
 
-2. Scanner Insertion Points (now if you right-click on an application/grpc-web-text HTTP request / host -> Scan -> Active Scan, Burp will manage to recognize the format, decode it, insert payloads in any field, and encode it back.)
+```bash
+# message.bin holds the raw protobuf bytes of a Kafka record value
+python3 grpc_protobuf_decoder.py --decode --type raw --file message.bin
 
+# or as a hex string
+echo '0a03666f6f1096011a070a036261721001' | python3 grpc_protobuf_decoder.py --decode --type hex
+```
 
-        1: {
-          9: 0
-          10: 0
-          19: {"test"}
-          25: {
-            "#{\"\".getClass().forName(\"java.net.URL\").getConstructors()[2].newInstance(\"http:/"
-          "/xxxx.oastify.com.\").hashCode()}"
-          }
-        }
-        10: {2: 20}
+```
+1: "foo"
+2: 150, zigzag=75
+3: {
+  1: "bar"
+  2: 1, zigzag=-1, bool=true
+}
+```
 
-# gRPC-Coder Usage
+Edit the fields, then encode back to raw bytes you can publish:
 
-**grpc_coder.py** has two options:
-- [Encode](#encoding)
-- [Decode](#decoding)
+```bash
+printf '1: "foo INJECTED"\n2: 9999\n3: {\n  1: "bar"\n  2: 1\n}\n' \
+    | python3 grpc_protobuf_decoder.py --encode --type raw > new_message.bin
 
-[grpc_coder.py](grpc_coder.py)
+# or a hex string instead of a binary file
+printf '1: "foo INJECTED"\n2: 9999\n' \
+    | python3 grpc_protobuf_decoder.py --encode --type hex
+```
 
-    python3 grpc_coder.py --help
+To turn the same edited text back into a gRPC-Web payload, drop `--type` (it defaults to
+`grpc-web-text`):
 
-    echo payload | python3 grpc_coder.py [--encode OR --decode]
+```bash
+printf '2: "Amin Nasiri Xenon GRPC"\n3: 54\n7: "<script>alert(origin)</script>"\n' \
+    | python3 grpc_protobuf_decoder.py --encode
+```
 
-    General Arguments:
-      --encode       encode protoscope binary output to application/grpc-web-text
-      --decode       decode application/grpc-web-text base64 encoded payload to protoscope format
-      --type         content-type of payload [default: grpc-web-text] available types: [grpc-web-text, grpc-web+proto]
-    
-    Input Arguments:
-    Default Input is Standard Input
-      --file        to get input from a file 
-    
-    Help:
-      --help        print help message
+> **Confluent Schema Registry:** if the producer uses the Confluent wire format, each value has a
+> 1-byte magic (`0x00`), a 4-byte schema id and a protobuf message-index header *before* the
+> protobuf bytes. Strip that prefix before decoding with `--type raw`, and re-add it after encoding.
+
+---
+
+# gRPC Coder
+
+[grpc_coder.py](grpc_coder.py) pipes gRPC-Web payloads through
+[protoscope](https://github.com/protocolbuffers/protoscope).
+
+> Prefer [grpc_protobuf_decoder.py](#standalone-protobuf-decoder-and-encoder) unless you specifically
+> want protoscope's output format. This tool needs protoscope installed globally.
+
+```bash
+go install github.com/protocolbuffers/protoscope/cmd/protoscope...@latest
+```
+
+```
+echo payload | python3 grpc_coder.py [--encode OR --decode]
+
+General Arguments:
+  --encode       encode protoscope binary output to application/grpc-web-text
+  --decode       decode application/grpc-web-text base64 encoded payload to protoscope format
+  --type         content-type of payload [default: grpc-web-text]
+                 available types: [grpc-web-text, grpc-web+proto]
+
+Input Arguments:
+Default Input is Standard Input
+  --file        to get input from a file
+
+Help:
+  --help        print help message
+```
 
 ## Decoding
 
-In Burp Suite when you intercept the request, get the gRPC-Web base64 encoded payload and give it to the script as standard input:
+```bash
+echo "AAAAABYSC0FtaW4gTmFzaXJpGDY6BVhlbm9u" \
+    | python3 grpc_coder.py --decode --type grpc-web-text | protoscope > out.txt
+cat out.txt
+```
 
-    echo "AAAAABYSC0FtaW4gTmFzaXJpGDY6BVhlbm9u" | python3 grpc_coder.py --decode --type grpc-web-text | protoscope > out.txt
-    cat out.txt
+```
+2: {"Amin Nasiri"}
+3: 54
+7: {"Xenon"}
+```
 
-content of out.txt:
+Edit `out.txt`:
 
-    2: {"Amin Nasiri"}
-    3: 54
-    7: {"Xenon"}
-    
-    vim out.txt
-    ... edit the file
-
-content of edited out.txt:
-
-    cat out.txt
-    2: {"Amin Nasiri Xenon GRPC"}
-    3: 54
-    7: {"<script>alert(origin)</script>"}
-
-
-now you have to encode the new payload: [Encode](#encoding)
+```
+2: {"Amin Nasiri Xenon GRPC"}
+3: 54
+7: {"<script>alert(origin)</script>"}
+```
 
 ## Encoding
 
-after editing [decoded](#decoding) payload you have to encode it:
+```bash
+protoscope -s out.txt | python3 grpc_coder.py --encode --type grpc-web-text
+```
 
-    protoscope -s out.txt | python3 grpc_coder.py --encode --type grpc-web-text
+```
+AAAAADoSFkFtaW4gTmFzaXJpIFhlbm9uIEdSUEMYNjoePHNjcmlwdD5hbGVydChvcmlnaW4pPC9zY3JpcHQ+
+```
 
-Output:
-    
-    AAAAADoSFkFtaW4gTmFzaXJpIFhlbm9uIEdSUEMYNjoePHNjcmlwdD5hbGVydChvcmlnaW4pPC9zY3JpcHQ+
+Put the new base64 payload back into the intercepted request.
 
-Then you put the new base64 payload into Burp Suite intercepted request.
+---
 
-# Standalone Protobuf Decoder / Encoder (no protoscope) Usage
+# gRPC Scan
 
-[grpc_protobuf_decoder.py](grpc_protobuf_decoder.py) is a pure-Python tool that decodes **and** encodes the protobuf wire format itself, with **no dependencies** and **without needing protoscope**.
+[grpc_scan.py](grpc_scan.py) extracts endpoints, messages and field types from gRPC-Web JavaScript.
 
-Use this when you do not want to install `protoscope`, or when the payload is plain protobuf that is not wrapped in a gRPC-Web frame (for example a **protobuf message taken from a Kafka topic**, a file, a `.bin` dump, etc.).
+```bash
+pip install -r requirements.txt
 
-> Note: protobuf wire bytes do not contain field names, so output is field-number based (the same as protoscope).
+python3 grpc_scan.py --file main.js
+# or
+cat main.js | python3 grpc_scan.py --stdin
+```
 
-## Help & Supported Types
+## What it expects
 
-    python3 grpc_protobuf_decoder.py --help
+This tool is written for **webpacked** bundles. Its endpoint pattern requires `MethodDescriptor("`
+with a double quote directly against the path, which is what a bundler produces. Raw
+`protoc-gen-grpc-web` output uses single quotes with the path on its own line:
 
-    --decode  decode a payload into readable text (default)
-    --encode  encode the readable text format back into a protobuf payload
-    --type    payload format:
-                grpc-web-text   base64, default        e.g. AAAAAAUKA2Zvbw==
-                grpc-web+proto  raw gRPC framed bytes
-                raw             raw protobuf bytes (no gRPC frame)
-                hex             hex string of raw protobuf bytes
-    --file    read input from a file instead of stdin
+```js
+const methodDescriptor_AuthService_Login = new grpc.web.MethodDescriptor(
+  '/auth.AuthService/Login',
+```
 
-The readable text format (printed by `--decode`, consumed by `--encode`):
+and **no endpoints will be found** in a file shaped like that. Messages are still extracted either
+way.
 
-    1: "a string"        # length-delimited string
-    2: 150               # varint
-    3: 0xdeadbeef        # raw bytes (hex)
-    4: fixed64=123       # 8-byte fixed (wire type 1)
-    5: fixed32=42        # 4-byte fixed (wire type 5)
-    6: {                 # nested message
-      1: "nested"
-    }
+If that bites you, use the Burp extension's **Analyze gRPC-Web Endpoints** instead. It accepts
+either quote style and any whitespace, also picks up paths from `rpcCall` sites, recovers each
+method's call style and request/response message types, converts accessor names back to real proto
+field names (`user_name` rather than `UserName`), and exports the result as JSON, CSV or a `.proto`.
 
-## Decoding a gRPC-Web payload (no protoscope needed)
+## Saving JavaScript files
 
-    echo "AAAAABYSC0FtaW4gTmFzaXJpGDY6BVhlbm9u" | python3 grpc_protobuf_decoder.py --decode
+Open the file in a browser and save it, or download it directly. **Do not** copy and paste the
+JavaScript content.
 
-Output (varints also show alternative interpretations, since the wire type alone is ambiguous):
+Protobuf version support: version 3 is fine; some version 2 features do not work.
 
-    2: "Amin Nasiri"
-    3: 54, zigzag=27
-    7: "Xenon"
+## Options
 
-When you re-encode, only the leading integer is used and the hints are ignored, so you can leave them or delete them.
+```
+python3 grpc_scan.py [INPUT]
+Input Arguments:
+  --file      file name of js file
+  --stdin     get input from standard input
+Help:
+  --help      print help message
+```
 
-## Example: decode / encode a Kafka protobuf message
+## Example output
 
-A protobuf message stored in a Kafka topic is just **raw protobuf bytes** (there is no gRPC `application/grpc-web-text` framing), so use `--type raw` for a binary file or `--type hex` for a hex string.
+```
+python3 grpc_scan.py --file main.js
 
-**Decode** a raw protobuf value dumped from Kafka into a file:
+Found Endpoints:
+  /grpc.gateway.testing.EchoService/Echo
+  /grpc.gateway.testing.EchoService/EchoAbort
+  /grpc.gateway.testing.EchoService/NoOp
+  /grpc.gateway.testing.EchoService/ServerStreamingEcho
+  /grpc.gateway.testing.EchoService/ServerStreamingEchoAbort
 
-    # message.bin holds the raw protobuf bytes of a Kafka record value
-    python3 grpc_protobuf_decoder.py --decode --type raw --file message.bin
+Found Messages:
 
-    # or as a hex string:
-    echo '0a03666f6f1096011a070a036261721001' | python3 grpc_protobuf_decoder.py --decode --type hex
+grpc.gateway.testing.EchoRequest:
++------------+--------------------+--------------+
+| Field Name |     Field Type     | Field Number |
++============+====================+==============+
+| Message    | Proto3StringField  | 1            |
++------------+--------------------+--------------+
+| Name       | Proto3StringField  | 2            |
++------------+--------------------+--------------+
+| Age        | Proto3IntField     | 3            |
++------------+--------------------+--------------+
+| IsAdmin    | Proto3BooleanField | 4            |
++------------+--------------------+--------------+
+| Weight     | Proto3FloatField   | 5            |
++------------+--------------------+--------------+
 
-Output:
+grpc.gateway.testing.ServerStreamingEchoRequest:
++-----------------+-------------------+--------------+
+|   Field Name    |    Field Type     | Field Number |
++=================+===================+==============+
+| Message         | Proto3StringField | 1            |
++-----------------+-------------------+--------------+
+| MessageCount    | Proto3IntField    | 2            |
++-----------------+-------------------+--------------+
+| MessageInterval | Proto3IntField    | 3            |
++-----------------+-------------------+--------------+
+```
 
-    1: "foo"
-    2: 150, zigzag=75
-    3: {
-      1: "bar"
-      2: 1, zigzag=-1, bool=true
-    }
+---
 
-**Edit** the fields you want (change a value, inject a payload, etc.), then **encode** it back to raw protobuf bytes you can produce/publish to Kafka:
+# Big String Chunker
 
-    printf '1: "foo INJECTED"\n2: 9999\n3: {\n  1: "bar"\n  2: 1\n}\n' \
-        | python3 grpc_protobuf_decoder.py --encode --type raw > new_message.bin
+A long string cannot sit on one line in protoscope's text format, so
+[big_string_chunker.py](big_string_chunker.py) splits it into 80-character pieces, and reassembles
+them.
 
-    # or get a hex string instead of a binary file:
-    printf '1: "foo INJECTED"\n2: 9999\n' \
-        | python3 grpc_protobuf_decoder.py --encode --type hex
+```bash
+# chunk
+cat bigString.txt | python3 big_string_chunker.py --stdin --chunk
+python3 big_string_chunker.py --file bigString.txt --chunk
 
-To turn the same edited text back into a **gRPC-Web** payload (re-adds the frame + base64), just drop `--type` (defaults to `grpc-web-text`):
+# un-chunk
+cat chunkedString.txt | python3 big_string_chunker.py --stdin --un-chunk
+python3 big_string_chunker.py --file chunkedString.txt --un-chunk
+```
 
-    printf '2: "Amin Nasiri Xenon GRPC"\n3: 54\n7: "<script>alert(origin)</script>"\n' \
-        | python3 grpc_protobuf_decoder.py --encode
+Given a long base64 blob, it produces:
 
-> Confluent Schema Registry note: if your Kafka producer uses the Confluent wire format, each value has a 1-byte magic (`0x00`) + 4-byte schema id + a protobuf message-index header **before** the protobuf bytes. Strip that prefix before decoding with `--type raw`, and re-add it after encoding.
+```
+1: {
+  "T2dnUwACAAAAAAAAAABzFQAAAAAAAAAJCzcBE09wdXNIZWFkAQE4AYC7AAAAAABPZ2dTAAAAAAAAAAAA"
+  "AHMVAAABAAAAo2rOoQE3T3B1c1RhZ3MPAAAAbGlib3B1cyB1bmtub3duAQAAABQAAABFTkNPREVSPU1v"
+  "emlsbGExMjQuME9nZ1MAAMAwAAAAAAAAcxUAAAIAAAD1DNygG//T/yb/KP//CP8h/yT/JP8k/yX/JP8l"
+  "YhAygIak+pZZu654kaBYG+9Hag=="
+}
+```
 
-# Big String Chunker Tool
-When you have a big string that you want to put it into a value in protobuf fields, you have to make that string into some pieces of characters using [big_string_chunker.py](big_string_chunker.py).
+> The tool uses field number 1 by default — change it to the field you are actually targeting.
 
-For Example:
+The old Burp extension had this built in. The Java extension does not, so run it from the command
+line, or see the [`legacy/python-tools`](../../tree/legacy/python-tools) branch.
 
-    This String is big:
-      "T2dnUwACAAAAAAAAAABzFQAAAAAAAAAJCzcBE09wdXNIZWFkAQE4AYC7AAAAAABPZ2dTAAAAAAAAAAAAAHMVAAABAAAAo2rOoQE3T3B1c1RhZ3MPAAAAbGlib3B1cyB1bmtub3duAQAAABQAAABFTkNPREVSPU1vemlsbGExMjQuME9nZ1MAAMAwAAAAAAAAcxUAAAIAAAD1DNygG//T/yb/KP//CP8h/yT/JP8k/yX/JP8l/yj/Kfh4/5AiWRn+hxCNu1lGW1E1RpFlgncP1g3KdvtuuhDanwxtyvMzTX/X3ain7fAXGnRupDzl9oir"jHtN7BZBGZZW9Vkyv2oBhgfnGhJPxrf7RJ9D4e2AABS0iAuHWWWzs0UZpgwlqMwOZ+w4PIymRYPzCB5q9C9JFVUjdihmqLbP8WICC+0eSFmUO+lM4PYiVprOWgfbwTcNqaYdZSKT3fp2pjNuTJzyvEO/t2Dg1TnCwjoq0veEM1YcRx4polaFw/au+FdceT13SuK8ehmSEHPyLB1H2lUAAAAAAAAAAaBfGjYa5md8lEWEol5mykby0OgcohE0KzMpefR9SiVHFG7sL0r7JrAeot6SRV1x1iWWVBejRscEDQA0gyXKQnrH1P+/cIqNOLFZzHVfcTfCbDASrlauLF5i9eLUEFv289im/BQqPPGkld7iwBlOA5zZz4ysnRYDv8VytH9F9vLqNgpiWqNO0pgr+4Dl9i4vtxgCYAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAEEH5ttS9etaTCa18br69R/RM6tCIKjxjEULqgaJJQkCBwJxDR9kAsol/Xymr7cFKgJ+0crArSf9IqQ/WgqEAgEtmTqgwA0BkOTT4q2YhAygIak+pZZu654kaBYG+9Hag=="
+---
 
-    the tool converts it to this:
+# Articles and videos
 
-    1: {
-      "T2dnUwACAAAAAAAAAABzFQAAAAAAAAAJCzcBE09wdXNIZWFkAQE4AYC7AAAAAABPZ2dTAAAAAAAAAAAA"
-      "AHMVAAABAAAAo2rOoQE3T3B1c1RhZ3MPAAAAbGlib3B1cyB1bmtub3duAQAAABQAAABFTkNPREVSPU1v"
-      "emlsbGExMjQuME9nZ1MAAMAwAAAAAAAAcxUAAAIAAAD1DNygG//T/yb/KP//CP8h/yT/JP8k/yX/JP8l"
-      "/yj/Kfh4/5AiWRn+hxCNu1lGW1E1RpFlgncP1g3KdvtuuhDanwxtyvMzTX/X3ain7fAXGnRupDzl9oir"
-      "jHtN7BZBGZZW9Vkyv2oBhgfnGhJPxrf7RJ9D4e2AABS0iAuHWWWzs0UZpgwlqMwOZ+w4PIymRYPzCB5q"
-      "9C9JFVUjdihmqLbP8WICC+0eSFmUO+lM4PYiVprOWgfbwTcNqaYdZSKT3fp2pjNuTJzyvEO/t2Dg1TnC"
-      "wjoq0veEM1YcRx4polaFw/au+FdceT13SuK8ehmSEHPyLB1H2lUAAAAAAAAAAaBfGjYa5md8lEWEol5m"
-      "ykby0OgcohE0KzMpefR9SiVHFG7sL0r7JrAeot6SRV1x1iWWVBejRscEDQA0gyXKQnrH1P+/cIqNOLFZ"
-      .
-      .
-      .
-      "zHVfcTfCbDASrlauLF5i9eLUEFv289im/BQqPPGkld7iwBlOA5zZz4ysnRYDv8VytH9F9vLqNgpiWqNO"
-      "0pgr+4Dl9i4vtxgCYAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
-      "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
-      "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
-      "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAEEH5ttS9etaTCa18br69R/R"
-      "M6tCIKjxjEULqgaJJQkCBwJxDR9kAsol/Xymr7cFKgJ+0crArSf9IqQ/WgqEAgEtYmTqgwA0BkOTT4q2"
-      "YhAygIak+pZZu654kaBYG+9Hag=="
-    }
+The methodology for pentesting gRPC-Web, including finding hidden services and endpoints:
 
-- Note: Do not forget to change the field number. The tool uses field number 1 by default.
+- [Hacking into gRPC-Web](https://infosecwriteups.com/hacking-into-grpc-web-a54053757a45)
+- [Hacking into gRPC-Web: Part 2](https://medium.com/@nxenon/hacking-into-grpc-web-part-2-f8540309e1e8)
+  — covers `application/grpc-web+proto`
 
-## Big String Chunker in gRPC Coder Burp Extension [Chunk]
-- Big String
-![Big String Chunker in gRPC Coder Burp Extension Chunk](https://github.com/nxenon/grpc-pentest-suite/assets/61124903/023850e2-e8e6-423e-b8fe-8ffe35ad632a)
-- Result
-![Big String Chunker Result Chunk](https://github.com/nxenon/grpc-pentest-suite/assets/61124903/287208ea-9984-4e56-9bef-d3cc666e1c8e)
+Using the scan tool and the Burp extension together, to manipulate payloads and find hidden
+endpoints, services and messages:
 
-### Big String Chunker CLI Usage [Chunk]
+[![Watch the video](https://img.youtube.com/vi/VoDyweIjT2U/maxresdefault.jpg)](https://youtu.be/VoDyweIjT2U?si=kXWbQELnJZfyHaId)
 
-    cat bigString.txt | python3 big_string_chunker.py --stdin --chunk
-    python3 big_string_chunker.py --file bigString.txt --chunk
-
-## Big String Chunker in gRPC Coder Burp Extension [Un-Chunk]
-- Big String
-![Big String Chunker in gRPC Coder Burp Extension Un-Chunk](https://github.com/nxenon/grpc-pentest-suite/assets/61124903/f7fa678b-74cb-4149-93a5-2a15375b4f0a)
-- Result:
-![Big String Chunker Result Un-Chunk](https://github.com/nxenon/grpc-pentest-suite/assets/61124903/aa9268b9-22ab-443c-a17e-3331cf4e766e)
-
-
-### Big String Chunker CLI Usage [Un-Chunk]
-
-    cat chunkedString.txt | python3 big_string_chunker.py --stdin --un-chunk
-    python3 chunkedString.py --file bigString.txt --un-chunk
-
-# gRPC-Scan Usage
-
-[grpc_scan.py](grpc_scan.py)
-        
-    python3 grpc_scan.py --file main.js
-    OR
-    cat main.js | python3 grpc_scan.py --stdin
-
-# gRPC-Scan Javascript Files Note
-
-For saving javascript files, you have to open them in browser and save the file or download it directly.
-
-**Do not** copy and paste the javascript content.
-
-ProtoBuf Version Support:
-- Version 3 [OK]
-- Version 2 [Some Features do not work]
-
-
-## Requirements
-
-
-        pip install -r requirements.txt
-
-
-## gRPC-Scan Help
-
-    python3 grpc_scan.py --help
-
-    python3 grpc_scan.py [INPUT]
-    Input Arguments:
-      --file      file name of js file
-      --stdin     get input from standard input
-    Help:
-      --help      print help message
-
-## gRPC-Scan Output Example
-
-        
-    python3 grpc_scan.py --file main.js
-
-    Found Endpoints:
-      /grpc.gateway.testing.EchoService/Echo
-      /grpc.gateway.testing.EchoService/EchoAbort
-      /grpc.gateway.testing.EchoService/NoOp
-      /grpc.gateway.testing.EchoService/ServerStreamingEcho
-      /grpc.gateway.testing.EchoService/ServerStreamingEchoAbort
-    
-    Found Messages:
-    
-    grpc.gateway.testing.EchoRequest:
-    +------------+--------------------+--------------+
-    | Field Name |     Field Type     | Field Number |
-    +============+====================+==============+
-    | Message    | Proto3StringField  | 1            |
-    +------------+--------------------+--------------+
-    | Name       | Proto3StringField  | 2            |
-    +------------+--------------------+--------------+
-    | Age        | Proto3IntField     | 3            |
-    +------------+--------------------+--------------+
-    | IsAdmin    | Proto3BooleanField | 4            |
-    +------------+--------------------+--------------+
-    | Weight     | Proto3FloatField   | 5            |
-    +------------+--------------------+--------------+
-    | Test       | Proto3StringField  | 6            |
-    +------------+--------------------+--------------+
-    | Test2      | Proto3StringField  | 7            |
-    +------------+--------------------+--------------+
-    | Test3      | Proto3StringField  | 16           |
-    +------------+--------------------+--------------+
-    | Test4      | Proto3StringField  | 20           |
-    +------------+--------------------+--------------+
-    
-    grpc.gateway.testing.EchoResponse:
-    +--------------+--------------------+--------------+
-    |  Field Name  |     Field Type     | Field Number |
-    +==============+====================+==============+
-    | Message      | Proto3StringField  | 1            |
-    +--------------+--------------------+--------------+
-    | Name         | Proto3StringField  | 2            |
-    +--------------+--------------------+--------------+
-    | Age          | Proto3IntField     | 3            |
-    +--------------+--------------------+--------------+
-    | IsAdmin      | Proto3BooleanField | 4            |
-    +--------------+--------------------+--------------+
-    | Weight       | Proto3FloatField   | 5            |
-    +--------------+--------------------+--------------+
-    | Test         | Proto3StringField  | 6            |
-    +--------------+--------------------+--------------+
-    | Test2        | Proto3StringField  | 7            |
-    +--------------+--------------------+--------------+
-    | Test3        | Proto3StringField  | 16           |
-    +--------------+--------------------+--------------+
-    | Test4        | Proto3StringField  | 20           |
-    +--------------+--------------------+--------------+
-    | MessageCount | Proto3IntField     | 8            |
-    +--------------+--------------------+--------------+
-    
-    grpc.gateway.testing.ServerStreamingEchoRequest:
-    +-----------------+-------------------+--------------+
-    |   Field Name    |    Field Type     | Field Number |
-    +=================+===================+==============+
-    | Message         | Proto3StringField | 1            |
-    +-----------------+-------------------+--------------+
-    | MessageCount    | Proto3IntField    | 2            |
-    +-----------------+-------------------+--------------+
-    | MessageInterval | Proto3IntField    | 3            |
-    +-----------------+-------------------+--------------+
-    
-    grpc.gateway.testing.ServerStreamingEchoResponse:
-    +------------+-------------------+--------------+
-    | Field Name |    Field Type     | Field Number |
-    +============+===================+==============+
-    | Message    | Proto3StringField | 1            |
-    +------------+-------------------+--------------+
-    
-    grpc.gateway.testing.ClientStreamingEchoRequest:
-    +------------+-------------------+--------------+
-    | Field Name |    Field Type     | Field Number |
-    +============+===================+==============+
-    | Message    | Proto3StringField | 1            |
-    +------------+-------------------+--------------+
-    
-    grpc.gateway.testing.ClientStreamingEchoResponse:
-    +--------------+----------------+--------------+
-    |  Field Name  |   Field Type   | Field Number |
-    +==============+================+==============+
-    | MessageCount | Proto3IntField | 1            |
-    +--------------+----------------+--------------+
-    
+> These predate the Java rewrite, so the Burp extension shown is the old Python one. The methodology
+> still applies; only the extension's installation and UI have changed.
 
 # gRPC Lab
-For testing this tool and getting familiar with gRPC-Web, I made a [lab](https://github.com/nxenon/grpc-lab) for gRPC & gRPC-Web.
+
+To practise against something real, use the [gRPC & gRPC-Web lab](https://github.com/nxenon/grpc-lab).
 
 # References
-This repo uses two other library directly in [lib](libs) directory to remove some dependencies for new burp extension:
-- [six](https://github.com/benjaminp/six)
-- [blackboxprotobuf](https://github.com/nccgroup/blackboxprotobuf)
+
+- [protoscope](https://github.com/protocolbuffers/protoscope) — used by `grpc_coder.py`
+- [jsbeautifier](https://github.com/beautifier/js-beautify) and
+  [texttable](https://github.com/foutaise/texttable) — used by `grpc_scan.py`
+- [blackboxprotobuf](https://github.com/nccgroup/blackboxprotobuf) — vendored by the old Python Burp
+  extension on the [`legacy/python-tools`](../../tree/legacy/python-tools) branch
+
+# License
+
+See [LICENSE](LICENSE).
