@@ -3,11 +3,11 @@ ExtensionType: 1
 Name: gRPC-Web Coder
 RepoName: grpc-web-coder
 ScreenVersion: 2.0.0
-SerialVersion: 4
-MinPlatformVersion: 2
+SerialVersion: 5
+MinPlatformVersion: 22
 ProOnly: False
 Author: Amin Nasiri
 ShortDescription: Encode/Decode gRPC-Web payloads automatically.
-EntryPoint: build/libs/grpc-web-coder-all.jar
+EntryPoint: grpc-web-coder-all.jar
 BuildCommand: ./gradlew clean fatJar
 SupportedProducts: Pro, Community
