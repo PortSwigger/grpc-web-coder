@@ -1,10 +1,10 @@
 Uuid: 63b92be302fa4521bf18d74b3adbbc00
 ExtensionType: 1
 Name: gRPC-Web Coder
-RepoName: grpc-pentest-suite
+RepoName: grpc-web-coder
 ScreenVersion: 2.0.0
 SerialVersion: 4
-MinPlatformVersion: 0
+MinPlatformVersion: 2
 ProOnly: False
 Author: Amin Nasiri
 ShortDescription: Encode/Decode gRPC-Web payloads automatically.
