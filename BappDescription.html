@@ -1,44 +1,45 @@
-<p>Decodes and re-encodes gRPC-Web request and response bodies in Burp's message editor, without
-needing the target's <code>.proto</code> schema.</p>
+<p>
+    Decodes and re-encodes gRPC-Web request and response bodies in the message editor, without needing the target's
+    <code class="InlineCode">.proto</code> schema. gRPC-Web bodies are protobuf wrapped in length-prefixed frames, and
+    <code class="InlineCode">application/grpc-web-text</code> bodies are base64 on top of that, so they arrive as an
+    opaque blob that ordinary testing techniques do not reach. This extension unwraps the framing, infers a type for
+    every protobuf field, and shows the result as editable JSON. Edits are re-encoded on the way out, so a payload can
+    be tampered with in Proxy, Repeater and Intruder like any other request body.
+</p>
 
-<p>gRPC-Web bodies are protobuf wrapped in length-prefixed frames, and
-<code>application/grpc-web-text</code> bodies are base64 on top of that. In Burp they arrive as an
-opaque blob, so ordinary testing techniques do not reach them. This extension unwraps the framing,
-infers a type for every protobuf field, and shows the result as editable JSON. Edits are re-encoded
-on the way out, so a payload can be tampered with in Proxy, Repeater and Intruder like any other
-request body.</p>
-
-<p><b>Supported content types</b></p>
+<h2>Features</h2>
 <ul>
-  <li><code>application/grpc-web-text</code> and <code>application/grpc-web-text+proto</code></li>
-  <li><code>application/grpc-web+proto</code> and <code>application/grpc-web</code></li>
+    <li>Adds a decoded gRPC-Web tab to requests and responses, with the payload as JSON and an editable type definition
+        alongside it.</li>
+    <li>Guesses a type for each field from the wire format, and lists the other readings the same bytes would allow, so
+        an ambiguous field can be reinterpreted without trial and error.</li>
+    <li>Handles every frame in a body, including the multiple data frames of a server-streaming response and the trailer
+        frame that closes it.</li>
+    <li>Inflates and re-deflates gzip-compressed frames.</li>
+    <li>Supports proto3 packed repeated fields, which are indistinguishable from a bytes field on the wire.</li>
+    <li>Extracts service routes and message field definitions from generated gRPC-Web JavaScript, revealing methods that
+        no part of the application's UI calls.</li>
+    <li>Exports those findings as JSON, CSV, a reconstructed <code class="InlineCode">.proto</code> for <code
+            class="InlineCode">protoc</code> or <code class="InlineCode">grpcurl</code>, or as type definitions that
+        make payloads decode with their real field names.</li>
+    <li>Supports <code class="InlineCode">application/grpc-web-text</code>, <code
+            class="InlineCode">application/grpc-web-text+proto</code>, <code
+            class="InlineCode">application/grpc-web+proto</code> and <code
+            class="InlineCode">application/grpc-web</code>.</li>
 </ul>
 
-<p><b>What it does</b></p>
-<ul>
-  <li>Adds a <b>Decoded gRPC-Web</b> tab to requests and responses, with the payload as JSON and an
-      editable type definition alongside it.</li>
-  <li>Guesses a type for each field from the wire format, and lists the other readings the same
-      bytes would allow, so an ambiguous field can be reinterpreted without trial and error.</li>
-  <li>Handles every frame in a body, including the multiple data frames of a server-streaming
-      response and the trailer frame that closes it.</li>
-  <li>Inflates and re-deflates gzip-compressed frames.</li>
-  <li>Supports proto3 packed repeated fields, which are indistinguishable from a bytes field on the
-      wire.</li>
-  <li>Extracts service routes and message field definitions from generated gRPC-Web JavaScript, via
-      <b>Analyze gRPC-Web Endpoints</b> on the right-click menu, revealing methods that no part of
-      the application's UI calls.</li>
-  <li>Exports those findings as JSON, CSV, a reconstructed <code>.proto</code> for
-      <code>protoc</code> or <code>grpcurl</code>, or as type definitions to paste back into the
-      Type Definition tab so payloads decode with their real field names.</li>
-</ul>
+<h2>Usage</h2>
+<ol>
+    <li>Send a gRPC-Web request through Burp and open the Decoded gRPC-Web tab in Repeater. Field names are not carried
+        on the wire, so fields appear by number until you name them in the type definition.</li>
+    <li>Edit the payload as JSON, then switch back to the raw view. The body and <code
+            class="InlineCode">Content-Length</code> are re-encoded for you.</li>
+    <li>Right-click the response containing the site's gRPC-Web JavaScript bundle and choose Analyze gRPC-Web Endpoints
+        to recover the real field names and numbers.</li>
+    <li>Export those results as type definitions and paste them into the Type Definition tab, which makes every
+        subsequent payload readable.</li>
+</ol>
 
-<p><b>Getting started</b></p>
-<p>Send a gRPC-Web request through Burp and open the <b>Decoded gRPC-Web</b> tab in Repeater. Field
-names are not carried on the wire, so fields appear by number until you name them in the type
-definition. Running the JavaScript analyzer over the site's gRPC-Web bundle recovers the real names
-and numbers; exporting its results as type definitions and pasting them into the Type Definition tab
-makes every subsequent payload readable.</p>
-
-<p>For a walkthrough of testing gRPC-Web, see
-<a href="https://github.com/nxenon/grpc-pentest-suite">grpc-pentest-suite</a>.</p>
+<p>For a walkthrough of testing gRPC-Web Coder, see
+    <a href="https://github.com/nxenon/grpc-pentest-suite">https://github.com/nxenon/grpc-pentest-suite</a>.
+</p>
