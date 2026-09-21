@@ -3,7 +3,7 @@ ExtensionType: 1
 Name: gRPC-Web Coder
 RepoName: grpc-web-coder
 ScreenVersion: 2.0.0
-SerialVersion: 5
+SerialVersion: 6
 MinPlatformVersion: 22
 ProOnly: False
 Author: Amin Nasiri
