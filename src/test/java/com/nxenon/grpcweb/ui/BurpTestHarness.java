@@ -92,6 +92,26 @@ final class BurpTestHarness {
         return requestResponse;
     }
 
+    /** A response carrying a Content-Encoding, for the decompression path. */
+    static HttpRequestResponse encodedResponseWith(
+            String contentType, String contentEncoding, byte[] body) {
+        installObjectFactory();
+        HttpResponse response = mock(HttpResponse.class);
+        when(response.headerValue("Content-Type")).thenReturn(contentType);
+        when(response.headerValue("X-Grpc-Content-Type")).thenReturn(null);
+        when(response.headerValue("Content-Encoding")).thenReturn(contentEncoding);
+        when(response.body()).thenReturn(new TestByteArray(body));
+
+        HttpRequest request = mock(HttpRequest.class);
+        when(request.url()).thenReturn("https://example.test/app.js");
+
+        HttpRequestResponse requestResponse = mock(HttpRequestResponse.class);
+        when(requestResponse.request()).thenReturn(request);
+        when(requestResponse.hasResponse()).thenReturn(true);
+        when(requestResponse.response()).thenReturn(response);
+        return requestResponse;
+    }
+
     /** A response with the given Content-Type and body. */
     static HttpRequestResponse responseWith(String contentType, String body) {
         installObjectFactory();

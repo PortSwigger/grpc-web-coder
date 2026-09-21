@@ -45,8 +45,12 @@ final class JsAnalysisRunner {
             api.logging().logToOutput("gRPC-Web Coder: nothing selected to analyze.");
             return;
         }
-        // Copy what is needed now: holding HttpRequestResponse objects across threads and across
-        // time is what the "large projects" criterion warns against.
+        // Only cheap metadata is read here: the label, the body handle and one header. Holding
+        // HttpRequestResponse objects across threads and across time is what the "large projects"
+        // criterion warns against, so those are resolved now and nothing else crosses.
+        //
+        // Decompression is deliberately NOT done here. Inflating a multi-megabyte bundle takes
+        // long enough to freeze Burp's UI, and this method runs on the event dispatch thread.
         for (HttpRequestResponse requestResponse : selected) {
             String source = describe(requestResponse);
             ByteArray body = extractBody(requestResponse);
@@ -55,14 +59,14 @@ final class JsAnalysisRunner {
                         "gRPC-Web Coder: " + source + " has no response body to analyze.");
                 continue;
             }
-            String script = decompress(requestResponse.response(), body);
-            executor.execute(() -> run(source, script));
+            String encoding = header(requestResponse.response(), "Content-Encoding");
+            executor.execute(() -> run(source, encoding, body));
         }
     }
 
-    private void run(String source, String script) {
+    private void run(String source, String encoding, ByteArray body) {
         try {
-            JsAnalyzer.Result result = JsAnalyzer.analyze(script);
+            JsAnalyzer.Result result = JsAnalyzer.analyze(decompress(source, encoding, body));
             if (result.isEmpty()) {
                 panel.addEmptyResult(source);
                 api.logging().logToOutput(
@@ -96,9 +100,12 @@ final class JsAnalysisRunner {
      *
      * <p>Burp's own compression utilities are used rather than a hand-rolled inflater, so gzip,
      * deflate and brotli all work.
+     *
+     * <p>Called from the worker thread, never from the event dispatch thread: inflating a large
+     * bundle is slow, and the encoding is passed in rather than re-read so that no
+     * {@link HttpResponse} has to cross threads to get here.
      */
-    private String decompress(HttpResponse response, ByteArray body) {
-        String encoding = header(response, "Content-Encoding");
+    private String decompress(String source, String encoding, ByteArray body) {
         CompressionType type = compressionType(encoding);
         if (type == null) {
             return new String(body.getBytes(), StandardCharsets.UTF_8);
@@ -110,8 +117,8 @@ final class JsAnalysisRunner {
             // A mislabelled or truncated body is common; fall back to the raw bytes rather than
             // giving up on the file entirely.
             api.logging().logToOutput(
-                    "gRPC-Web Coder: could not decompress a " + encoding
-                            + " response, scanning it as-is.");
+                    "gRPC-Web Coder: could not decompress the " + encoding + " response from "
+                            + source + ", scanning it as-is.");
             return new String(body.getBytes(), StandardCharsets.UTF_8);
         }
     }
