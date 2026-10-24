@@ -4,6 +4,7 @@ import burp.api.montoya.MontoyaApi;
 import burp.api.montoya.core.ByteArray;
 import burp.api.montoya.http.message.HttpRequestResponse;
 import burp.api.montoya.utilities.CompressionType;
+import com.nxenon.grpcweb.analyze.JsAnalyzer;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
@@ -17,6 +18,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -91,7 +93,13 @@ class JsAnalysisRunnerTest {
                     decompressStarted.countDown();
                     // Stands in for a slow inflate of a large bundle. If this runs on the caller's
                     // thread, analyze() cannot return until it is released.
-                    releaseDecompress.await(30, TimeUnit.SECONDS);
+                    try {
+                        releaseDecompress.await(30, TimeUnit.SECONDS);
+                    } catch (InterruptedException interrupted) {
+                        // shutdown() interrupts the worker; returning quietly keeps the test's
+                        // output clean rather than printing a stack trace from a dying thread.
+                        Thread.currentThread().interrupt();
+                    }
                     return new BurpTestHarness.TestByteArray(
                             SCRIPT.getBytes(StandardCharsets.UTF_8));
                 });
@@ -183,6 +191,126 @@ class JsAnalysisRunnerTest {
 
         assertTrue(log.awaitRun(), "the analysis never completed");
         assertTrue(log.summary().contains("1 endpoint(s)"), log.summary());
+        runner.shutdown();
+    }
+
+    @Test
+    @Timeout(value = 60, unit = TimeUnit.SECONDS)
+    @DisplayName("a StackOverflowError is reported rather than vanishing")
+    void stackOverflowIsReported() throws Exception {
+        MontoyaApi api = BurpTestHarness.api(BurpTestHarness.editorMap());
+        when(api.utilities().compressionUtils().decompress(any(ByteArray.class), any()))
+                .thenThrow(new StackOverflowError());
+
+        // StackOverflowError is an Error, not a RuntimeException. Catching only the latter meant a
+        // blown stack in the regex engine produced no output at all, not even in the Errors tab.
+        burp.api.montoya.logging.Logging logging = api.logging();
+        CountDownLatch errorLogged = new CountDownLatch(1);
+        doAnswer(invocation -> {
+            errorLogged.countDown();
+            return null;
+        }).when(logging).logToError(anyString(), any(Throwable.class));
+
+        JsAnalysisRunner runner = new JsAnalysisRunner(api, new AnalyzerPanel(api));
+        runner.analyze(List.of(BurpTestHarness.encodedResponseWith(
+                "application/javascript", "gzip", new byte[]{1, 2, 3, 4})));
+
+        assertTrue(errorLogged.await(20, TimeUnit.SECONDS),
+                "a StackOverflowError should reach the Errors tab");
+        runner.shutdown();
+    }
+
+    @Test
+    @Timeout(value = 60, unit = TimeUnit.SECONDS)
+    @DisplayName("a StackOverflowError does not kill the worker thread")
+    void workerSurvivesAStackOverflow() throws Exception {
+        MontoyaApi api = BurpTestHarness.api(BurpTestHarness.editorMap());
+        AtomicReference<Boolean> first = new AtomicReference<>(Boolean.TRUE);
+        when(api.utilities().compressionUtils().decompress(any(ByteArray.class), any()))
+                .thenAnswer(invocation -> {
+                    if (first.getAndSet(Boolean.FALSE)) {
+                        throw new StackOverflowError();
+                    }
+                    return new BurpTestHarness.TestByteArray(
+                            SCRIPT.getBytes(StandardCharsets.UTF_8));
+                });
+
+        LogWatcher log = new LogWatcher();
+        log.attach(api);
+        JsAnalysisRunner runner = new JsAnalysisRunner(api, new AnalyzerPanel(api));
+
+        // The first run blows the stack; the second must still be processed.
+        runner.analyze(List.of(
+                BurpTestHarness.encodedResponseWith("application/javascript", "gzip",
+                        new byte[]{1, 2, 3, 4}),
+                BurpTestHarness.encodedResponseWith("application/javascript", "gzip",
+                        new byte[]{5, 6, 7, 8})));
+
+        assertTrue(log.awaitRun(), "the second analysis never completed");
+        assertTrue(log.summary().contains("1 endpoint(s)"), log.summary());
+        runner.shutdown();
+    }
+
+    @Test
+    @Timeout(value = 60, unit = TimeUnit.SECONDS)
+    @DisplayName("an oversized script says so, rather than \"no definitions found\"")
+    void oversizedScriptIsReportedBySize() throws Exception {
+        MontoyaApi api = BurpTestHarness.api(BurpTestHarness.editorMap());
+        byte[] huge = new byte[JsAnalyzer.MAX_INPUT_LENGTH + 1024];
+        java.util.Arrays.fill(huge, (byte) 'a');
+        when(api.utilities().compressionUtils().decompress(any(ByteArray.class), any()))
+                .thenReturn(new BurpTestHarness.TestByteArray(huge));
+
+        LogWatcher log = new LogWatcher();
+        burp.api.montoya.logging.Logging logging = api.logging();
+        CountDownLatch reported = new CountDownLatch(1);
+        AtomicReference<String> message = new AtomicReference<>("");
+        doAnswer(invocation -> {
+            String text = invocation.getArgument(0);
+            if (text.contains("scanning limit")) {
+                message.set(text);
+                reported.countDown();
+            }
+            return null;
+        }).when(logging).logToOutput(anyString());
+
+        JsAnalysisRunner runner = new JsAnalysisRunner(api, new AnalyzerPanel(api));
+        runner.analyze(List.of(BurpTestHarness.encodedResponseWith(
+                "application/javascript", "gzip", new byte[]{1, 2, 3, 4})));
+
+        assertTrue(reported.await(20, TimeUnit.SECONDS),
+                "an oversized bundle should say it was too big");
+        assertTrue(message.get().contains("MiB"), message.get());
+        assertFalse(message.get().contains("no gRPC-Web definitions"), message.get());
+        runner.shutdown();
+    }
+
+    @Test
+    @Timeout(value = 60, unit = TimeUnit.SECONDS)
+    @DisplayName("a body that decompresses to nothing is reported, not silently scanned")
+    void emptyDecompressionIsReported() throws Exception {
+        MontoyaApi api = BurpTestHarness.api(BurpTestHarness.editorMap());
+        // Burp's decompressor does not always throw on a mislabelled body; it can hand back an
+        // empty result, which used to look exactly like a bundle containing nothing.
+        when(api.utilities().compressionUtils().decompress(any(ByteArray.class), any()))
+                .thenReturn(new BurpTestHarness.TestByteArray(new byte[0]));
+
+        burp.api.montoya.logging.Logging logging = api.logging();
+        CountDownLatch reported = new CountDownLatch(1);
+        doAnswer(invocation -> {
+            String text = invocation.getArgument(0);
+            if (text.contains("could not decompress")) {
+                reported.countDown();
+            }
+            return null;
+        }).when(logging).logToOutput(anyString());
+
+        JsAnalysisRunner runner = new JsAnalysisRunner(api, new AnalyzerPanel(api));
+        runner.analyze(List.of(BurpTestHarness.encodedResponseWith(
+                "application/javascript", "gzip", SCRIPT.getBytes(StandardCharsets.UTF_8))));
+
+        assertTrue(reported.await(20, TimeUnit.SECONDS),
+                "a body that decompressed to nothing should be reported");
         runner.shutdown();
     }
 

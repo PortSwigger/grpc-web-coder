@@ -152,6 +152,17 @@ final class AnalyzerPanel {
                 "No gRPC-Web definitions found in " + source + "."));
     }
 
+    /**
+     * Reports a run that could not complete.
+     *
+     * <p>Without this the status line kept whatever the previous successful run had left there, so
+     * a failed analysis looked indistinguishable from one that had not been started — the user had
+     * no way to tell the difference from the suite tab.
+     */
+    void addFailedResult(String source, String reason) {
+        SwingUtilities.invokeLater(() -> setSummary(reason));
+    }
+
     private void clear() {
         SwingUtilities.invokeLater(() -> {
             results.clear();

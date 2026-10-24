@@ -208,6 +208,33 @@ class GrpcWebCodecTest {
         }
 
         @Test
+        @DisplayName("a decompression bomb is refused instead of exhausting memory")
+        void decompressionBombIsRefused() throws Exception {
+            // 96 MiB of zeroes gzips to a few hundred KB, so it sails past the compressed-frame
+            // limit and only the inflated size can stop it. PortSwigger's reviewer took Burp to
+            // about 3 GB of heap by opening the decoded tab on a response like this.
+            byte[] bomb = GrpcWebCodec.compress(new byte[96 * 1024 * 1024]);
+            assertTrue(bomb.length < 1024 * 1024,
+                    "the fixture should be small while compressed, was " + bomb.length);
+
+            GrpcFrame frame = GrpcFrame.compressedData(bomb);
+            GrpcWebException e =
+                    assertThrows(GrpcWebException.class, () -> GrpcWebCodec.decompress(frame));
+            assertTrue(e.getMessage().contains("decompression bomb"), e.getMessage());
+        }
+
+        @Test
+        @DisplayName("a large but legitimate frame still inflates")
+        void largePayloadUnderTheCapStillWorks() throws Exception {
+            byte[] payload = new byte[4 * 1024 * 1024];
+            for (int i = 0; i < payload.length; i++) {
+                payload[i] = (byte) (i % 251);
+            }
+            GrpcFrame frame = GrpcFrame.compressedData(GrpcWebCodec.compress(payload));
+            assertArrayEquals(payload, GrpcWebCodec.decompress(frame));
+        }
+
+        @Test
         @DisplayName("a frame flagged compressed but holding garbage is reported clearly")
         void invalidGzipIsReported() {
             GrpcFrame frame = GrpcFrame.compressedData(bytes(0x01, 0x02, 0x03));

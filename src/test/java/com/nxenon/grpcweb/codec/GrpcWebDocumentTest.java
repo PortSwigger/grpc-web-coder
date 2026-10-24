@@ -214,6 +214,79 @@ class GrpcWebDocumentTest {
     }
 
     @Nested
+    class UnknownFrameFlags {
+
+        @Test
+        @DisplayName("a flag bit this codec does not define survives a round trip")
+        void unknownFlagBitIsPreserved() throws Exception {
+            // Bit 2 has no meaning in the gRPC-Web spec today. Rebuilding the flags byte from
+            // just "compressed" and "trailer" silently cleared it, so an untouched body came back
+            // different from the one that went in.
+            byte[] frames = GrpcWebCodec.writeFrames(java.util.List.of(
+                    new GrpcFrame(0x04, Hex.decode("0a04616d696e"))));
+
+            GrpcWebDocument document = GrpcWebDocument.decode(frames, GrpcWebFormat.PROTO);
+            assertFalse(document.isSimple(),
+                    "an unknown flag needs the frame list form, which can record it");
+            assertTrue(document.toPayloadJson().contains("\"flags\""),
+                    document.toPayloadJson());
+
+            assertArrayEquals(frames, GrpcWebDocument.encode(
+                    document.toPayloadJson(), document.toTypeDefinitionJson(),
+                    GrpcWebFormat.PROTO));
+        }
+
+        @Test
+        @DisplayName("unknown bits are kept alongside the defined ones")
+        void unknownBitsCoexistWithKnownFlags() throws Exception {
+            // Trailer (0x80) plus compressed (0x01) plus an undefined bit (0x10).
+            byte[] payload = GrpcWebCodec.compress(
+                    "grpc-status:0\r\n".getBytes(StandardCharsets.UTF_8));
+            byte[] frames = GrpcWebCodec.writeFrames(java.util.List.of(
+                    new GrpcFrame(0x80 | 0x01 | 0x10, payload)));
+
+            GrpcWebDocument document = GrpcWebDocument.decode(frames, GrpcWebFormat.PROTO);
+            String json = document.toPayloadJson();
+            assertTrue(json.contains("grpc-status:0"), json);
+            assertTrue(json.contains("\"compressed\": true"), json);
+            assertTrue(json.contains("\"flags\": 16"), json);
+
+            byte[] reencoded = GrpcWebDocument.encode(
+                    json, document.toTypeDefinitionJson(), GrpcWebFormat.PROTO);
+            GrpcFrame roundTripped = GrpcWebCodec.readFrames(reencoded).get(0);
+            assertEquals(0x80 | 0x01 | 0x10, roundTripped.flags());
+        }
+
+        @Test
+        @DisplayName("an ordinary frame does not gain a flags member")
+        void ordinaryFramesStayUncluttered() throws Exception {
+            GrpcWebDocument document = GrpcWebDocument.decode(
+                    ascii(STREAMING_TEXT_BODY), GrpcWebFormat.TEXT);
+            assertFalse(document.toPayloadJson().contains("\"flags\""),
+                    document.toPayloadJson());
+        }
+
+        @Test
+        @DisplayName("turning compression off still works when an unknown bit is present")
+        void editingCompressionKeepsUnknownBits() throws Exception {
+            byte[] frames = GrpcWebCodec.writeFrames(java.util.List.of(
+                    new GrpcFrame(0x01 | 0x20,
+                            GrpcWebCodec.compress(Hex.decode("0a04616d696e")))));
+
+            GrpcWebDocument document = GrpcWebDocument.decode(frames, GrpcWebFormat.PROTO);
+            String edited = document.toPayloadJson()
+                    .replace("\"compressed\": true", "\"compressed\": false");
+
+            byte[] reencoded = GrpcWebDocument.encode(
+                    edited, document.toTypeDefinitionJson(), GrpcWebFormat.PROTO);
+            GrpcFrame result = GrpcWebCodec.readFrames(reencoded).get(0);
+
+            assertFalse(result.isCompressed(), "the edit should have taken effect");
+            assertEquals(0x20, result.flags(), "the unknown bit should still be set");
+        }
+    }
+
+    @Nested
     class UserEdits {
 
         @Test
