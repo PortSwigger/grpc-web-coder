@@ -33,7 +33,7 @@ public final class JsAnalyzer {
      * Largest script this will scan. Generated bundles are big but not unbounded, and a cap keeps a
      * hostile multi-hundred-megabyte response from pinning a core inside Burp.
      */
-    static final int MAX_INPUT_LENGTH = 32 * 1024 * 1024;
+    public static final int MAX_INPUT_LENGTH = 32 * 1024 * 1024;
 
     /** Longest identifier or path segment any pattern will match, to bound repetition. */
     private static final int MAX_IDENT = 200;

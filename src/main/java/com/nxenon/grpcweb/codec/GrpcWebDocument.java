@@ -53,6 +53,7 @@ public final class GrpcWebDocument {
     private static final String KEY_MESSAGE = "message";
     private static final String KEY_TRAILERS = "trailers";
     private static final String KEY_COMPRESSED = "compressed";
+    private static final String KEY_FLAGS = "flags";
     private static final String KEY_RAW = "raw";
 
     private final List<Frame> frames;
@@ -63,29 +64,42 @@ public final class GrpcWebDocument {
     private static final class Frame {
         private final boolean trailer;
         private final boolean compressed;
+        /**
+         * The frame's flags byte exactly as it arrived.
+         *
+         * <p>Only bit 0 (compressed) and bit 7 (trailer) have a defined meaning today. Rebuilding
+         * the byte from those two alone silently cleared anything else a server had set, which
+         * breaks the guarantee that an unedited body re-encodes to the bytes it came from.
+         */
+        private final int flags;
         private final MessageValue message;
         private final String trailerText;
         private final byte[] raw;
 
-        private Frame(boolean trailer, boolean compressed, MessageValue message, String trailerText,
-                      byte[] raw) {
-            this.trailer = trailer;
-            this.compressed = compressed;
+        private Frame(int flags, MessageValue message, String trailerText, byte[] raw) {
+            this.flags = flags;
+            this.trailer = (flags & GrpcFrame.FLAG_TRAILER) != 0;
+            this.compressed = (flags & GrpcFrame.FLAG_COMPRESSED) != 0;
             this.message = message;
             this.trailerText = trailerText;
             this.raw = raw;
         }
 
-        static Frame message(MessageValue message, boolean compressed) {
-            return new Frame(false, compressed, message, null, null);
+        /** Bits with no defined meaning, which have to be carried through untouched. */
+        int unknownFlags() {
+            return flags & ~(GrpcFrame.FLAG_COMPRESSED | GrpcFrame.FLAG_TRAILER);
         }
 
-        static Frame trailers(String text, boolean compressed) {
-            return new Frame(true, compressed, null, text, null);
+        static Frame message(MessageValue message, int flags) {
+            return new Frame(flags, message, null, null);
         }
 
-        static Frame raw(byte[] bytes, boolean compressed, boolean trailer) {
-            return new Frame(trailer, compressed, null, null, bytes);
+        static Frame trailers(String text, int flags) {
+            return new Frame(flags, null, text, null);
+        }
+
+        static Frame raw(byte[] bytes, int flags) {
+            return new Frame(flags, null, null, bytes);
         }
     }
 
@@ -124,14 +138,14 @@ public final class GrpcWebDocument {
             if (wireFrame.isTrailer()) {
                 String text = ProtobufDecoder.tryDecodeUtf8(payload);
                 if (text != null) {
-                    decoded.add(Frame.trailers(text, wireFrame.isCompressed()));
+                    decoded.add(Frame.trailers(text, wireFrame.flags()));
                 } else {
-                    decoded.add(Frame.raw(payload, wireFrame.isCompressed(), true));
+                    decoded.add(Frame.raw(payload, wireFrame.flags()));
                 }
                 continue;
             }
             MessageValue message = ProtobufDecoder.decodeWith(payload, typeDefinition);
-            decoded.add(Frame.message(message, wireFrame.isCompressed()));
+            decoded.add(Frame.message(message, wireFrame.flags()));
         }
         return new GrpcWebDocument(decoded, typeDefinition, format);
     }
@@ -156,6 +170,10 @@ public final class GrpcWebDocument {
         return frames.size() == 1
                 && !frames.get(0).trailer
                 && !frames.get(0).compressed
+                // The bare form has nowhere to record an unrecognised flag bit, so a frame
+                // carrying one has to use the frame list or the bit would be dropped here
+                // instead of in the encoder.
+                && frames.get(0).unknownFlags() == 0
                 && frames.get(0).message != null;
     }
 
@@ -169,6 +187,11 @@ public final class GrpcWebDocument {
             JsonObject object = new JsonObject();
             if (frame.compressed) {
                 object.addProperty(KEY_COMPRESSED, true);
+            }
+            // Only shown when the server set a bit this codec does not understand, so an ordinary
+            // body stays uncluttered while an unusual one still round-trips.
+            if (frame.unknownFlags() != 0) {
+                object.addProperty(KEY_FLAGS, frame.unknownFlags());
             }
             if (frame.raw != null) {
                 object.addProperty(KEY_RAW, com.nxenon.grpcweb.protobuf.Hex.encode(frame.raw));
@@ -244,7 +267,12 @@ public final class GrpcWebDocument {
                 && frame.get(KEY_COMPRESSED).getAsBoolean();
 
         byte[] payload;
-        int flags = 0;
+        // Start from any bits the decoder could not interpret, so a flag this codec does not
+        // understand survives the round trip. The two defined bits are derived below from what the
+        // document actually says, rather than copied, so editing "compressed" still takes effect.
+        int flags = frame.has(KEY_FLAGS)
+                ? frame.get(KEY_FLAGS).getAsInt() & ~(GrpcFrame.FLAG_COMPRESSED | GrpcFrame.FLAG_TRAILER)
+                : 0;
         if (frame.has(KEY_RAW)) {
             payload = com.nxenon.grpcweb.protobuf.Hex.decode(frame.get(KEY_RAW).getAsString());
             if (frame.has(KEY_TRAILERS)) {

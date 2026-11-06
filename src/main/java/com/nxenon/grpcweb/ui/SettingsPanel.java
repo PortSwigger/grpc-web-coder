@@ -7,12 +7,15 @@ import javax.swing.Box;
 import javax.swing.BoxLayout;
 import javax.swing.ButtonGroup;
 import javax.swing.JCheckBox;
+import javax.swing.JComponent;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.JRadioButton;
 import javax.swing.JScrollPane;
+import javax.swing.JTextArea;
 import java.awt.BorderLayout;
 import java.awt.Component;
+import java.awt.Dimension;
 import java.awt.Font;
 
 /**
@@ -106,10 +109,28 @@ final class SettingsPanel {
         return label;
     }
 
-    private static JLabel note(String text) {
-        JLabel label = new JLabel("<html><body style='width:640px'>" + text + "</body></html>");
-        label.setBorder(BorderFactory.createEmptyBorder(0, 0, 6, 0));
-        return label;
+    /**
+     * A wrapped block of explanatory text.
+     *
+     * <p>Uses a read-only text area rather than a {@code JLabel} carrying {@code <html>} markup.
+     * Swing's HTML rendering in a label is not guaranteed — it can be switched off, and under Burp
+     * the markup was being shown to the user verbatim — so the text is wrapped by the component
+     * instead of by a style attribute that may never be interpreted.
+     */
+    private static JComponent note(String text) {
+        JTextArea area = new JTextArea(text);
+        area.setLineWrap(true);
+        area.setWrapStyleWord(true);
+        area.setEditable(false);
+        area.setFocusable(false);
+        area.setOpaque(false);
+        area.setBorder(BorderFactory.createEmptyBorder(0, 0, 6, 0));
+        // A JTextArea defaults to a monospaced font; match the surrounding labels instead.
+        area.setFont(new JLabel().getFont());
+        area.setAlignmentX(Component.LEFT_ALIGNMENT);
+        // BoxLayout would otherwise stretch the area to its maximum height.
+        area.setMaximumSize(new Dimension(640, Integer.MAX_VALUE));
+        return area;
     }
 
     Component uiComponent() {

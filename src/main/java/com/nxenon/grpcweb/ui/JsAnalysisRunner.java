@@ -66,7 +66,23 @@ final class JsAnalysisRunner {
 
     private void run(String source, String encoding, ByteArray body) {
         try {
-            JsAnalyzer.Result result = JsAnalyzer.analyze(decompress(source, encoding, body));
+            String script = decompress(source, encoding, body);
+
+            // Reported separately from "found nothing": an oversized bundle is the one case where
+            // the user can act on the answer, by saving the file and running the analysis another
+            // way, and "no definitions found" would send them looking for the wrong problem.
+            if (script.length() > JsAnalyzer.MAX_INPUT_LENGTH) {
+                String reason = String.format(
+                        "%s is %.1f MiB, over the %d MiB scanning limit, so it was not analyzed.",
+                        source,
+                        script.length() / (1024.0 * 1024.0),
+                        JsAnalyzer.MAX_INPUT_LENGTH / (1024 * 1024));
+                panel.addFailedResult(source, reason);
+                api.logging().logToOutput("gRPC-Web Coder: " + reason);
+                return;
+            }
+
+            JsAnalyzer.Result result = JsAnalyzer.analyze(script);
             if (result.isEmpty()) {
                 panel.addEmptyResult(source);
                 api.logging().logToOutput(
@@ -80,8 +96,17 @@ final class JsAnalysisRunner {
                     result.endpoints().size(),
                     result.fieldCount(),
                     result.messages().size()));
-        } catch (RuntimeException e) {
-            // The script is untrusted content; a failure must not kill the worker thread.
+        } catch (RuntimeException | StackOverflowError e) {
+            // StackOverflowError is an Error, not a RuntimeException, and catching only the latter
+            // made a blown stack vanish without a trace. Java's regex engine recurses as it
+            // repeats, so a hostile or merely pathological script can overflow it; that has to
+            // surface in the Errors tab and in the suite tab rather than silently doing nothing.
+            //
+            // Deliberately not Throwable: an OutOfMemoryError leaves the JVM in a state this
+            // extension cannot reason about, and swallowing it would hide that from Burp.
+            String reason = e.getClass().getSimpleName()
+                    + (e.getMessage() == null ? "" : ": " + e.getMessage());
+            panel.addFailedResult(source, "Analysis of " + source + " failed — " + reason);
             api.logging().logToError("gRPC-Web Coder failed to analyze " + source, e);
         }
     }
@@ -112,15 +137,33 @@ final class JsAnalysisRunner {
         }
         try {
             ByteArray decompressed = api.utilities().compressionUtils().decompress(body, type);
+            // Not every failure arrives as an exception: a body that is mislabelled or truncated
+            // can come back empty instead of throwing, and treating that as a successful decode
+            // meant scanning an empty string and reporting "no definitions found" with no hint
+            // that decompression was the problem.
+            if (decompressed == null || decompressed.length() == 0) {
+                return fallBackToRawBytes(source, encoding, body, "it decompressed to nothing");
+            }
             return new String(decompressed.getBytes(), StandardCharsets.UTF_8);
         } catch (RuntimeException e) {
-            // A mislabelled or truncated body is common; fall back to the raw bytes rather than
-            // giving up on the file entirely.
-            api.logging().logToOutput(
-                    "gRPC-Web Coder: could not decompress the " + encoding + " response from "
-                            + source + ", scanning it as-is.");
-            return new String(body.getBytes(), StandardCharsets.UTF_8);
+            return fallBackToRawBytes(source, encoding, body,
+                    e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage());
         }
+    }
+
+    /**
+     * Reports a failed decompression and scans the body as it arrived.
+     *
+     * <p>A mislabelled or truncated response is common enough that giving up on the file would be
+     * worse than scanning the raw bytes, but it has to be said out loud: silently analyzing the
+     * compressed bytes looks identical to a bundle that genuinely contains nothing.
+     */
+    private String fallBackToRawBytes(String source, String encoding, ByteArray body,
+                                      String reason) {
+        api.logging().logToOutput(
+                "gRPC-Web Coder: could not decompress the " + encoding + " response from "
+                        + source + " (" + reason + "), scanning it as-is.");
+        return new String(body.getBytes(), StandardCharsets.UTF_8);
     }
 
     private static CompressionType compressionType(String encoding) {

@@ -27,6 +27,19 @@ public final class GrpcWebCodec {
      */
     private static final long MAX_FRAME_LENGTH = 64L * 1024 * 1024;
 
+    /**
+     * Refuse to inflate beyond this, for the same reason the compressed length is capped.
+     *
+     * <p>A compression ratio of a thousand to one is easy to arrange, so a frame small enough to
+     * pass {@link #MAX_FRAME_LENGTH} can still inflate to gigabytes and exhaust Burp's heap. The
+     * inflated size has to be bounded as it is produced, not checked afterwards, because by then
+     * the memory is already gone.
+     */
+    static final int MAX_DECOMPRESSED_LENGTH = 64 * 1024 * 1024;
+
+    /** Copy buffer for the bounded inflate. */
+    private static final int INFLATE_BUFFER = 16 * 1024;
+
     private GrpcWebCodec() {
     }
 
@@ -128,7 +141,22 @@ public final class GrpcWebCodec {
             return frame.payload();
         }
         try (GZIPInputStream gzip = new GZIPInputStream(new ByteArrayInputStream(frame.payload()))) {
-            return gzip.readAllBytes();
+            // Deliberately not readAllBytes(): that inflates the whole stream before anything can
+            // object, so a gzip bomb becomes gigabytes of heap. Copying in bounded chunks lets the
+            // limit be enforced while the data is still arriving.
+            ByteArrayOutputStream inflated = new ByteArrayOutputStream();
+            byte[] buffer = new byte[INFLATE_BUFFER];
+            int read;
+            while ((read = gzip.read(buffer)) != -1) {
+                if (inflated.size() + read > MAX_DECOMPRESSED_LENGTH) {
+                    throw new GrpcWebException("Compressed frame inflates to more than "
+                            + (MAX_DECOMPRESSED_LENGTH / (1024 * 1024)) + " MiB."
+                            + " It is being refused rather than decoded, because a payload that"
+                            + " expands this far is a decompression bomb rather than a message.");
+                }
+                inflated.write(buffer, 0, read);
+            }
+            return inflated.toByteArray();
         } catch (IOException e) {
             throw new GrpcWebException(
                     "Frame is flagged as compressed but could not be gunzipped: " + e.getMessage(), e);
